@@ -1,11 +1,15 @@
 package main
 
 import (
+	"bufio"
+	"context"
 	"flag"
 	"fmt"
 	"log"
 	"os"
 	"os/signal"
+	"strconv"
+	"strings"
 
 	"github.com/bwmarrin/discordgo"
 )
@@ -13,44 +17,46 @@ import (
 var (
 	GuildID        = flag.String("guild", "", "Test guild ID. If not passed - bot registers commands globally")
 	token          = flag.String("token", "", "Bot access token")
+	AppID          = flag.String("app", "", "Application ID")
 	RemoveCommands = flag.Bool("rmcmd", true, "Remove all commands after shutdowning or not")
 )
 
 var s *discordgo.Session
+var ctx context.Context
 
-func getAuthenticationToken() (token string, err error) {
-	wd, err := os.Getwd()
-	if err != nil {
-		return "", err
-	}
+// func init() { flag.Parse() }
 
-	content, err := os.ReadFile(wd + `\\token.txt`)
-	if err != nil {
-		return "", err
-	}
-	return string(content), nil
-}
+// func init() {
+// 	ctx = context.Background()
 
-func init() { flag.Parse() }
+// 	var err error
+// 	token, err := GetToken("token.txt")
+// 	if err != nil {
+// 		panic(err)
+// 	}
 
-func init() {
-	var err error
-	token, err := getAuthenticationToken()
-	if err != nil {
-		panic(err)
-	}
+// 	fmt.Println("✅ Got Authentication Token")
 
-	fmt.Println("✅ Got Authentication Token")
+// 	s, err = discordgo.New("Bot " + token)
+// 	if err != nil {
+// 		panic(err)
+// 	}
 
-	s, err = discordgo.New("Bot " + token)
-	if err != nil {
-		panic(err)
-	}
+// 	fmt.Println("✅ Discord Client Created")
+// }
 
-	fmt.Println("✅ Discord Client Created")
-}
+// func init() {
+// 	s.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+// 		if h, ok := commandHandlers[i.ApplicationCommandData().Name]; ok {
+// 			h(s, i)
+// 		}
+// 	})
+// }
 
 var (
+	project_ID = "gogiffy"
+
+	err                      error
 	integerOptionMinValue          = 1.0
 	dmPermission                   = false
 	defaultMemberPermissions int64 = discordgo.PermissionManageServer
@@ -60,6 +66,19 @@ var (
 			Name:        "giffy",
 			Description: "Command for returning useful information about the bot",
 		},
+		{
+			Name:        "search",
+			Description: "Command for search for gifs with a particular tag",
+			Options: []*discordgo.ApplicationCommandOption{
+
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "tags",
+					Description: "tags that you want to search by to find a gif",
+					Required:    true,
+				},
+			},
+		},
 	}
 
 	commandHandlers = map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate){
@@ -67,7 +86,6 @@ var (
 			s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
-					Content: "Hey there! Congratulations, you just executed your first slash command",
 					Embeds: []*discordgo.MessageEmbed{{
 						Title: "Who am I?",
 						Description: `I am giffy! A multipurpose discord bot designed to allow the manipulation, tagging, archiving and retrieval of gifs!
@@ -89,27 +107,143 @@ var (
 				},
 			})
 		},
+		"search": func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+
+			// Access options in the order provided by the user.
+			options := i.ApplicationCommandData().Options
+
+			// Or convert the slice into a map
+
+			optionMap := make(map[string]*discordgo.ApplicationCommandInteractionDataOption, len(options))
+			for _, opt := range options {
+				optionMap[opt.Name] = opt
+			}
+
+			margs := make([]interface{}, 0, len(options))
+			// This example stores the provided arguments in an []interface{}
+			// which will be used to format the bot's response
+			option := optionMap["tags"]
+			margs = append(margs, option.StringValue())
+			var tags = strings.Split(option.StringValue(), ",")
+
+			bqUrls, err := GetUrlsFromTag(tags)
+			if err != nil {
+				panic(err)
+			}
+
+			fmt.Println(bqUrls)
+
+			msg := ""
+			for _, url := range bqUrls {
+				fmt.Println(url)
+				msg += url.GetPublicURL() + "\n"
+			}
+
+			s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				// Ignore type for now, they will be discussed in "responses"
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: msg,
+				},
+			})
+
+		},
 	}
+
+	componentsHandlers = map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate){}
 )
 
-func init() {
-	s.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
-		if h, ok := commandHandlers[i.ApplicationCommandData().Name]; ok {
-			h(s, i)
-		}
-	})
-}
+func processFile(fileName string) error {
+	errorList := make([]string, 0)
+	processedStrings := make([]string, 0)
 
+	// Open the file
+	file, err := os.Open(fileName) // Replace "your_file.txt" with the path to your text file
+	if err != nil {
+		fmt.Println("Error opening file:", err)
+		return err
+	}
+	defer file.Close()
+
+	// Create a scanner to read the file line by line
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		processedStrings = append(processedStrings, line)
+		fmt.Println(strconv.Itoa(len(processedStrings)) + "/10")
+		// Process each string and handle errors
+		if _, err := ProcessUrls([]string{line}); err != nil {
+			errorList = append(errorList, line)
+		}
+	}
+
+	// Check for errors in scanning the file
+	if err := scanner.Err(); err != nil {
+		fmt.Println("Error scanning file:", err)
+		return err
+	}
+
+	// Save the errors to a file
+	errorFile, err := os.Create("errors.txt")
+	if err != nil {
+		fmt.Println("Error creating error file:", err)
+		return err
+	}
+	defer errorFile.Close()
+
+	// Write errors to the file
+	writer := bufio.NewWriter(errorFile)
+	for _, err := range errorList {
+		_, err := writer.WriteString(err + "\n")
+		if err != nil {
+			fmt.Println("Error writing to error file:", err)
+			return err
+		}
+	}
+	// Flush the buffer to ensure all data is written to the file
+	writer.Flush()
+
+	return nil
+}
 func main() {
+
+	err := processFile("archivedgifs.txt")
+	if err != nil {
+		panic(err)
+	}
+
 	s.AddHandler(func(s *discordgo.Session, r *discordgo.Ready) {
 		log.Printf("Logged in as: %v#%v", s.State.User.Username, s.State.User.Discriminator)
 	})
+
+	// Components are part of interactions, so we register InteractionCreate handler
+	s.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+		switch i.Type {
+		// case discordgo.InteractionApplicationCommand:
+		// 	if h, ok := commandsHandlers[i.ApplicationCommandData().Name]; ok {
+		// 		h(s, i)
+		// 	}
+		case discordgo.InteractionMessageComponent:
+
+			if h, ok := componentsHandlers[i.MessageComponentData().CustomID]; ok {
+				h(s, i)
+			}
+		}
+	})
+
+	_, err = s.ApplicationCommandCreate(*AppID, *GuildID, &discordgo.ApplicationCommand{
+		Name:        "search",
+		Description: "Searching for gifs with particular tags",
+	})
+	if err != nil {
+		panic(err)
+	}
 
 	s.AddHandler(messageCreate)
 
 	s.Identify.Intents = discordgo.IntentsAll
 
-	err := s.Open()
+	err = s.Open()
 	if err != nil {
 		log.Fatalf("Cannot open the session: %v", err)
 	}
@@ -132,14 +266,6 @@ func main() {
 	<-stop
 
 	log.Println("Removing commands...")
-	// // We need to fetch the commands, since deleting requires the command ID.
-	// // We are doing this from the returned commands on line 375, because using
-	// // this will delete all the commands, which might not be desirable, so we
-	// // are deleting only the commands that we added.
-	// registeredCommands, err := s.ApplicationCommands(s.State.User.ID, *GuildID)
-	// if err != nil {
-	// 	log.Fatalf("Could not fetch registered commands: %v", err)
-	// }
 
 	for _, v := range registeredCommands {
 		err := s.ApplicationCommandDelete(s.State.User.ID, *GuildID, v.ID)
@@ -157,6 +283,52 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	if m.Author.ID == s.State.User.ID {
 		return
 	}
-	// If the message is "ping" reply with "Pong!"
-	fmt.Print(m.Attachments)
+	//Gifs can come in 2 forms, through an attachment, or through an embed
+	var urls []string
+	fmt.Println(m.Attachments)
+	fmt.Println(m.Embeds)
+	if len(m.Attachments) > 0 {
+		for _, attachment := range m.Attachments {
+			var url = attachment.URL
+			if UrlIsGif(url) {
+				urls = append(urls, attachment.URL)
+			}
+		}
+	}
+
+	if len(m.Embeds) > 0 {
+		for _, embed := range m.Embeds {
+			var url = embed.URL
+			if UrlIsGif(url) {
+				urls = append(urls, url)
+			}
+		}
+	}
+
+	if len(urls) > 0 {
+		fmt.Println(fmt.Sprint(len(urls)) + " gifs found")
+		_, err := ProcessUrls(urls)
+		if err != nil {
+			panic(err)
+		}
+
+		for _, url := range urls {
+			BigqueryURL, err := GetBigQueryURL(url)
+			if err != nil {
+				panic(err)
+			}
+
+			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf(`Gif Stored
+			Url: %s
+			Contains Caption: %s
+			Text: %s
+			UUID: %s
+			Bucket URL: %s`, BigqueryURL.url, strconv.FormatBool(BigqueryURL.contains_caption), BigqueryURL.text, BigqueryURL.bucket_uid, BigqueryURL.GetPublicURL()))
+		}
+	}
+
+	//If the message contains attachments
+	if (len(m.Attachments)) > 0 {
+		fmt.Println(m.Attachments)
+	}
 }

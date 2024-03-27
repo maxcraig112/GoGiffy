@@ -3,4 +3,4 @@ version: '3'
 tasks:
   run:
     cmds:
-      - go run ./src/main.go -guild 470896999722516480
+      - go run ./src/. -guild 470896999722516480 -app 1220642492173778996
