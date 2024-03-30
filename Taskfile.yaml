@@ -1,5 +1,5 @@
 
--- Make file for easily running the bot using the command `task run`
+# Make file for easily running the bot using the command `task run`
 version: '3'
 
 tasks:
