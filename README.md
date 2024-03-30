@@ -24,3 +24,11 @@ This repos provides abstraction of these commands through the discord bot Giffy.
 | ------------- | ------------- |
 | /giffy  | A link to github and a general description of the bot  |
 | /stats  | Returns interesting information regarding the state of the bots database  |
+
+
+
+## FAQ
+### Why use Golang?
+Idk
+### Why use Google Cloud Platform
+What's with all the questions?
