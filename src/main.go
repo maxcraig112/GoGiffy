@@ -25,8 +25,10 @@ var (
 var s *discordgo.Session
 var ctx context.Context
 
+// Parse input parameters
 func init() { flag.Parse() }
 
+// Get token from txt file (.gitignore :) ) and authenticate client
 func init() {
 	ctx = context.Background()
 
@@ -46,21 +48,11 @@ func init() {
 	fmt.Println("✅ Discord Client Created")
 }
 
-// func init() {
-// 	s.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
-// 		if h, ok := commandHandlers[i.ApplicationCommandData().Name]; ok {
-// 			h(s, i)
-// 		}
-// 	})
-// }
-
 var (
 	project_ID = "gogiffy"
 	err        error
-	// integerOptionMinValue          = 1.0
-	// dmPermission                   = false
-	// defaultMemberPermissions int64 = discordgo.PermissionManageServer
 
+	//List of all application commands currently available for giffy bot
 	commands = []*discordgo.ApplicationCommand{
 		{
 			Name:        "giffy",
@@ -85,6 +77,7 @@ var (
 		},
 	}
 
+	//list of functions that handle the interaction with the commands
 	commandHandlers = map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate){
 		"giffy": func(s *discordgo.Session, i *discordgo.InteractionCreate) {
 			s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
@@ -224,6 +217,7 @@ var (
 		},
 	}
 
+	//list of functions that handle the interaction with buttons
 	componentsHandlers = map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate){
 		"fd_previous": func(s *discordgo.Session, i *discordgo.InteractionCreate) {
 			bigquerySearch, err := GetBigQuerySearch(i.Message.Interaction.ID)
@@ -269,6 +263,8 @@ var (
 	}
 )
 
+// This function takes a txt file of gifs as input and will attempt to process this all
+// This has been used initially to migrate all gifs over from the previous giffy bot
 func processFile(fileName string) error {
 	errorList := make([]string, 0)
 	processedStrings := make([]string, 0)
@@ -346,10 +342,7 @@ func main() {
 		}
 	})
 
-	if err != nil {
-		panic(err)
-	}
-
+	//add a handler that allows for message reading. Intent is basically what the bot is able to do regarding the messages
 	s.AddHandler(messageCreate)
 
 	s.Identify.Intents = discordgo.IntentsAll
@@ -358,6 +351,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("Cannot open the session: %v", err)
 	}
+
+	//delete all previously existing commands, this is to prevent commands no longer in use from being visible
 	allCmds, _ := s.ApplicationCommands(*AppID, *GuildID)
 	for _, v := range allCmds {
 		fmt.Println(v.Name)
@@ -366,6 +361,8 @@ func main() {
 			log.Panicf("Cannot delete '%v' command: %v", v.Name, err)
 		}
 	}
+
+	//add all existing commands
 	log.Println("Adding commands...")
 	for _, v := range commands {
 		s.ApplicationCommandCreate(*AppID, *GuildID, v)
@@ -393,10 +390,10 @@ func main() {
 
 func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	// Ignore all messages created by the bot itself
-	// This isn't required in this specific example but it's a good practice.
 	if m.Author.ID == s.State.User.ID {
 		return
 	}
+
 	//Gifs can come in 2 forms, through an attachment, or through an embed
 	var urls []string
 	fmt.Println(m.Attachments)
@@ -427,17 +424,19 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		}
 
 		for _, url := range urls {
-			BigqueryURL, err := GetBigQueryURL(url)
+			_, err := GetBigQueryURL(url)
 			if err != nil {
 				panic(err)
 			}
 
-			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf(`Gif Stored
-			Url: %s
-			Contains Caption: %s
-			Text: %s
-			UUID: %s
-			Bucket URL: %s`, BigqueryURL.url, strconv.FormatBool(BigqueryURL.contains_caption), BigqueryURL.text, BigqueryURL.bucket_uid, BigqueryURL.GetPublicURL()))
+			//Debugging code to send new gifs to the channel
+
+			// 	s.ChannelMessageSend(m.ChannelID, fmt.Sprintf(`Gif Stored
+			// 	Url: %s
+			// 	Contains Caption: %s
+			// 	Text: %s
+			// 	UUID: %s
+			// 	Bucket URL: %s`, BigqueryURL.url, strconv.FormatBool(BigqueryURL.contains_caption), BigqueryURL.text, BigqueryURL.bucket_uid, BigqueryURL.GetPublicURL()))
 		}
 	}
 

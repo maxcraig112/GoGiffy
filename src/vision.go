@@ -11,16 +11,6 @@ var (
 )
 
 func init() {
-	// apiKey, err := GetToken("visionAPIKey.txt")
-	// if err != nil {
-	// 	return
-	// }
-
-	// visionClient, err = vision.NewImageAnnotatorClient(ctx, option.WithAPIKey(apiKey))
-	// if err != nil {
-	// 	return
-	// }
-
 	visionClient, err = vision.NewImageAnnotatorClient(ctx)
 	if err != nil {
 		return
