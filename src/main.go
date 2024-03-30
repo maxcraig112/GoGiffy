@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 )
@@ -24,26 +25,26 @@ var (
 var s *discordgo.Session
 var ctx context.Context
 
-// func init() { flag.Parse() }
+func init() { flag.Parse() }
 
-// func init() {
-// 	ctx = context.Background()
+func init() {
+	ctx = context.Background()
 
-// 	var err error
-// 	token, err := GetToken("token.txt")
-// 	if err != nil {
-// 		panic(err)
-// 	}
+	var err error
+	token, err := GetToken("token.txt")
+	if err != nil {
+		panic(err)
+	}
 
-// 	fmt.Println("✅ Got Authentication Token")
+	fmt.Println("✅ Got Authentication Token")
 
-// 	s, err = discordgo.New("Bot " + token)
-// 	if err != nil {
-// 		panic(err)
-// 	}
+	s, err = discordgo.New("Bot " + token)
+	if err != nil {
+		panic(err)
+	}
 
-// 	fmt.Println("✅ Discord Client Created")
-// }
+	fmt.Println("✅ Discord Client Created")
+}
 
 // func init() {
 // 	s.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
@@ -55,11 +56,10 @@ var ctx context.Context
 
 var (
 	project_ID = "gogiffy"
-
-	err                      error
-	integerOptionMinValue          = 1.0
-	dmPermission                   = false
-	defaultMemberPermissions int64 = discordgo.PermissionManageServer
+	err        error
+	// integerOptionMinValue          = 1.0
+	// dmPermission                   = false
+	// defaultMemberPermissions int64 = discordgo.PermissionManageServer
 
 	commands = []*discordgo.ApplicationCommand{
 		{
@@ -78,6 +78,10 @@ var (
 					Required:    true,
 				},
 			},
+		},
+		{
+			Name:        "stats",
+			Description: "Command for returning interesting stats about the bot",
 		},
 	}
 
@@ -109,48 +113,159 @@ var (
 		},
 		"search": func(s *discordgo.Session, i *discordgo.InteractionCreate) {
 
-			// Access options in the order provided by the user.
 			options := i.ApplicationCommandData().Options
-
-			// Or convert the slice into a map
 
 			optionMap := make(map[string]*discordgo.ApplicationCommandInteractionDataOption, len(options))
 			for _, opt := range options {
 				optionMap[opt.Name] = opt
 			}
 
-			margs := make([]interface{}, 0, len(options))
 			// This example stores the provided arguments in an []interface{}
 			// which will be used to format the bot's response
 			option := optionMap["tags"]
-			margs = append(margs, option.StringValue())
 			var tags = strings.Split(option.StringValue(), ",")
 
-			bqUrls, err := GetUrlsFromTag(tags)
+			//remove spaces on either side
+			for i, str := range tags {
+				tags[i] = strings.TrimSpace(str)
+
+				if len(str) > 0 && str[len(str)-1] == 's' {
+					// Add a new string without 's'
+					tags = append(tags, str[:len(str)-1])
+				} else {
+					// Add the original string with an s
+					tags = append(tags, str+"s")
+				}
+			}
+			// Access options in the order provided by the user.
+			s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: "Currently searching for gifs with the tags `" + strings.Join(tags, ", ") + "`, This may take up 10 seconds",
+				},
+			})
+
+			// Or convert the slice into a map
+
+			bqUIDS, err := GetUIDFromTags(tags)
+			if err != nil {
+				panic(err)
+			}
+			if len(bqUIDS) != 0 {
+				index := 0
+				_, err = s.InteractionResponseEdit(i.Interaction, CreateSearchWebhookEdit(tags, bqUIDS, index))
+				if err != nil {
+					fmt.Println(err.Error())
+				}
+				bigquerySearch := BigquerySearch{
+					message_id:  i.Interaction.ID,
+					query_time:  time.Now(),
+					token:       i.Token,
+					tags:        tags,
+					index:       index,
+					bucket_uids: bqUIDS,
+				}
+				err = AddBigQuerySearch(bigquerySearch)
+				if err != nil {
+					fmt.Println(err.Error())
+				}
+			} else {
+				content := "Sorry! there are no gifs with the tags `" + strings.Join(tags, ", ") + "`, please try with other search terms."
+				_, err = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
+					Content: &content,
+				})
+				if err != nil {
+					fmt.Println(err.Error())
+				}
+			}
+		},
+		"stats": func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+			stats, err := GetUrlStats()
 			if err != nil {
 				panic(err)
 			}
 
-			fmt.Println(bqUrls)
-
-			msg := ""
-			for _, url := range bqUrls {
-				fmt.Println(url)
-				msg += url.GetPublicURL() + "\n"
-			}
-
 			s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-				// Ignore type for now, they will be discussed in "responses"
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
-					Content: msg,
+					Embeds: []*discordgo.MessageEmbed{{
+						Title: "Giffy Stats",
+						Description: `Giffy bot dynamically stores all unique gifs it comes across. Here are some interesting statistics!
+						`,
+						Image: &discordgo.MessageEmbedImage{URL: "https://media1.tenor.com/m/oVakhxonutgAAAAC/christian-bale-american-psycho.gif"},
+						Author: &discordgo.MessageEmbedAuthor{
+							URL:     "https://github.com/maxcraig112",
+							Name:    "Max.imilian",
+							IconURL: "https://media.discordapp.net/attachments/846175975560839178/950204054754177124/cool_obama.jpg?ex=660a0e7c&is=65f7997c&hm=45d7bc572e2922799019b15e73210daf8dc98fdd6b8e85471e96e510e120dba2&",
+						},
+
+						Fields: []*discordgo.MessageEmbedField{
+							{
+								Name:  "Total gifs stored",
+								Value: strconv.Itoa(stats.total_gifs),
+							},
+							{
+								Name:  "Gifs without text",
+								Value: strconv.Itoa(stats.gifs_without_text),
+							},
+							{
+								Name:  "Gifs with text",
+								Value: strconv.Itoa(stats.gifs_with_text),
+							},
+							{
+								Name:  "Number of unique tags",
+								Value: strconv.Itoa(stats.unique_tags_count),
+							},
+						},
+					}},
 				},
 			})
-
 		},
 	}
 
-	componentsHandlers = map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate){}
+	componentsHandlers = map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate){
+		"fd_previous": func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+			bigquerySearch, err := GetBigQuerySearch(i.Message.Interaction.ID)
+			if err != nil {
+				fmt.Println(err)
+			}
+			//decrement the index
+			numberOfResults := len(bigquerySearch.bucket_uids)
+			bigquerySearch.index = (bigquerySearch.index - 1 + numberOfResults) % numberOfResults
+			i.Interaction.ID = i.Message.Interaction.ID
+			i.Interaction.Token = bigquerySearch.token
+			_, err = s.InteractionResponseEdit(i.Interaction, CreateSearchWebhookEdit(bigquerySearch.tags, bigquerySearch.bucket_uids, bigquerySearch.index))
+			if err != nil {
+				fmt.Println(err.Error())
+				panic(err)
+			}
+			AddBigQuerySearch(bigquerySearch)
+		},
+		"fd_next": func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+			bigquerySearch, err := GetBigQuerySearch(i.Message.Interaction.ID)
+			if err != nil {
+				fmt.Println(err)
+			}
+			//decrement the index
+			numberOfResults := len(bigquerySearch.bucket_uids)
+			bigquerySearch.index = (bigquerySearch.index + 1) % numberOfResults
+			i.Interaction.ID = i.Message.Interaction.ID
+			i.Interaction.Token = bigquerySearch.token
+			_, err = s.InteractionResponseEdit(i.Interaction, CreateSearchWebhookEdit(bigquerySearch.tags, bigquerySearch.bucket_uids, bigquerySearch.index))
+			if err != nil {
+				fmt.Println(err.Error())
+				panic(err)
+			}
+			// fmt.Println(bigquerySearch.bucket_uids)
+			// fmt.Println(GetPublicURLFromUID(bigquerySearch.bucket_uids[bigquerySearch.index]))
+			AddBigQuerySearch(bigquerySearch)
+
+		},
+		"fd_delete": func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+			fmt.Println("Original Message ID " + i.Message.Interaction.ID)
+
+		},
+	}
 )
 
 func processFile(fileName string) error {
@@ -206,11 +321,10 @@ func processFile(fileName string) error {
 	return nil
 }
 func main() {
-
-	err := processFile("archivedgifs.txt")
-	if err != nil {
-		panic(err)
-	}
+	// err := processFile("archivedgifs.txt")
+	// if err != nil {
+	// 	panic(err)
+	// }
 
 	s.AddHandler(func(s *discordgo.Session, r *discordgo.Ready) {
 		log.Printf("Logged in as: %v#%v", s.State.User.Username, s.State.User.Discriminator)
@@ -219,10 +333,10 @@ func main() {
 	// Components are part of interactions, so we register InteractionCreate handler
 	s.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		switch i.Type {
-		// case discordgo.InteractionApplicationCommand:
-		// 	if h, ok := commandsHandlers[i.ApplicationCommandData().Name]; ok {
-		// 		h(s, i)
-		// 	}
+		case discordgo.InteractionApplicationCommand:
+			if h, ok := commandHandlers[i.ApplicationCommandData().Name]; ok {
+				h(s, i)
+			}
 		case discordgo.InteractionMessageComponent:
 
 			if h, ok := componentsHandlers[i.MessageComponentData().CustomID]; ok {
@@ -231,10 +345,6 @@ func main() {
 		}
 	})
 
-	_, err = s.ApplicationCommandCreate(*AppID, *GuildID, &discordgo.ApplicationCommand{
-		Name:        "search",
-		Description: "Searching for gifs with particular tags",
-	})
 	if err != nil {
 		panic(err)
 	}
@@ -247,15 +357,17 @@ func main() {
 	if err != nil {
 		log.Fatalf("Cannot open the session: %v", err)
 	}
-
-	log.Println("Adding commands...")
-	registeredCommands := make([]*discordgo.ApplicationCommand, len(commands))
-	for i, v := range commands {
-		cmd, err := s.ApplicationCommandCreate(s.State.User.ID, *GuildID, v)
+	allCmds, _ := s.ApplicationCommands(*AppID, *GuildID)
+	for _, v := range allCmds {
+		fmt.Println(v.Name)
+		err := s.ApplicationCommandDelete(s.State.User.ID, *GuildID, v.ID)
 		if err != nil {
-			log.Panicf("Cannot create '%v' command: %v", v.Name, err)
+			log.Panicf("Cannot delete '%v' command: %v", v.Name, err)
 		}
-		registeredCommands[i] = cmd
+	}
+	log.Println("Adding commands...")
+	for _, v := range commands {
+		s.ApplicationCommandCreate(*AppID, *GuildID, v)
 	}
 
 	defer s.Close()
@@ -267,7 +379,8 @@ func main() {
 
 	log.Println("Removing commands...")
 
-	for _, v := range registeredCommands {
+	allCmds, _ = s.ApplicationCommands(*AppID, *GuildID)
+	for _, v := range allCmds {
 		err := s.ApplicationCommandDelete(s.State.User.ID, *GuildID, v.ID)
 		if err != nil {
 			log.Panicf("Cannot delete '%v' command: %v", v.Name, err)
