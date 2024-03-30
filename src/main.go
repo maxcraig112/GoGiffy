@@ -123,7 +123,8 @@ var (
 			// This example stores the provided arguments in an []interface{}
 			// which will be used to format the bot's response
 			option := optionMap["tags"]
-			var tags = strings.Split(option.StringValue(), ",")
+			str := sanitizeInput(option.StringValue())
+			var tags = strings.Split(str, ",")
 
 			//remove spaces on either side
 			for i, str := range tags {

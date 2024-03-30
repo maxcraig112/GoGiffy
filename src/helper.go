@@ -60,3 +60,9 @@ func CreateSearchWebhookEdit(tags []string, bqUIDS []string, index int) (webhook
 		},
 	}
 }
+
+func sanitizeInput(input string) string {
+	// Replace single quotes with two single quotes to escape them
+	sanitized := strings.Replace(input, "'", "''", -1)
+	return sanitized
+}
