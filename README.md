@@ -36,6 +36,7 @@ You may have some trouble running the bot for yourself given it's reliance on GC
 2. add your bot API key under a `token.txt` file
 3. add your Cloud Vision API Key under a `visionAPIKey.txt` file
 4. Modify the [table names](https://github.com/maxcraig112/GoGiffy/blob/main/src/bigquery.go#L14-L17) to correspond to your bigquery table
+    - Your table schemas should correspond with the structs in [bigquery.go](https://github.com/maxcraig112/GoGiffy/blob/main/src/bigquery.go#L24-L39)
 5. Pray
 
 If you get everything setup, you can run the bot using `task run`
