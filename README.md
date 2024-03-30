@@ -30,7 +30,7 @@ This repos provides abstraction of these commands through the discord bot Giffy.
 ## FAQ
 ### How to run the bot?
 
-You may have some trouble running the bot for yourself given it's reliance on GCP and some particular database names, however here are some list of prerequisites if you want to give it a try.
+You may have some trouble running the bot for yourself given it's reliance on GCP and some particular database names, however here are a list of some prerequisites if you want to give it a try.
 1. Have a Google Cloud Platform account
     - Access to the `Cloud Vision API`, `Bigquery` and a `Bucket`
 2. add your bot API key under a `token.txt` file
