@@ -185,13 +185,6 @@ func convertValuesToStrings(values []bigquery.Value) []string {
 	for i, v := range values {
 
 		strings[i] = fmt.Sprintf("%v", v)
-		// // Assuming the value is a string
-		// if str, ok := v.([]byte); ok {
-		// 	strings[i] = string(str)
-		// } else {
-
-		// 	strings[i] = ""
-		// }
 	}
 	return strings
 }
