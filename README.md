@@ -1,12 +1,12 @@
 
 # GoGiffy
-The original [Giffy Bot](https://github.com/maxcraig112/Giffy-bot) however written in Golang and using the Google Cloud Platform.
+A refactor of the original [Giffy Bot](https://github.com/maxcraig112/Giffy-bot) however written in Golang and utilising the Google Cloud Platform.
 
 [Discord Invite Link](https://discord.com/oauth2/authorize?client_id=1220642492173778996&permissions=2684472384&scope=bot+applications.commands)
 
 Please note that this bot is a work in progress and therefore current functionality is limited. Feel free to report any bugs or potential features you would like to see.
 ## Giffy-Bot
-A multipurpose repos designed to allow the ~~manipulation~~, tagging, archiving and retrieval of gifs.
+A multipurpose repos designed to allow the manipulation, tagging, archiving and retrieval of gifs.
 
 This repos provides abstraction of these commands through the discord bot Giffy.
 
